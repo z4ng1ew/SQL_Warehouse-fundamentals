@@ -1,8 +1,0 @@
-"name","lastname","type","volume","currency_name","last_rate_to_usd","total_volume_in_usd"
-"Петр","not defined",2,"203","not defined","1","203"
-"Иван","Иванов",1,"410","EUR","0.9","369.0"
-"not defined","not defined",0,"120","JPY","0.0087","1.0440"
-"not defined","not defined",1,"120","USD","1","120"
-"not defined","Сидоров",0,"50","EUR","0.9","45.0"
-"not defined","Сидоров",1,"500","USD","1","500"
-"not defined","Сидоров",2,"500","JPY","0.0087","4.3500"
