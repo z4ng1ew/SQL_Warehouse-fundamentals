@@ -2,7 +2,7 @@ SELECT
     t1.name,
     t1.lastname,
     t1.currency_name,
-    t1.money * t1.rate_to_usd AS currency_in_usd
+    trim_scale(t1.money * t1.rate_to_usd) AS currency_in_usd
 FROM (
     SELECT
         COALESCE(u.name, 'not defined') AS name,
