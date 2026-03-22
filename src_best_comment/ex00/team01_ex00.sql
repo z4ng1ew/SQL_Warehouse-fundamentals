@@ -27,7 +27,7 @@ ORDER BY 1 DESC, 2, 3;
 
 
 
--- CTE (Common Table Expression) — "подготовительный блок" last_rates:
+-- CTE (Common Table Expression) — "подготовительный блок" last_rates (последние_рейтинги):
 -- Находим последний (самый свежий) курс для каждой валюты.
 -- DISTINCT ON (id) — PostgreSQL-идиома: оставляет только ОДНУ строку
 -- на каждый уникальный id. Какую именно — определяет ORDER BY.
