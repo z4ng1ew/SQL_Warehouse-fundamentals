@@ -1,0 +1,147 @@
+Нужно сначала войти в PostgreSQL. В PowerShell:
+
+```powershell
+chcp 65001
+psql -U postgres -d rush01
+```
+
+Вводишь пароль. Потом уже внутри psql:
+
+```sql
+INSERT INTO currency VALUES (100, 'EUR', 0.85, '2022-01-01 13:29');
+INSERT INTO currency VALUES (100, 'EUR', 0.79, '2022-01-08 13:29');
+SELECT count(*) FROM currency;
+```
+
+Должно показать `10` (было 8, добавили 2).
+
+Но вообще, раз ты настроил **SQLTools в VS Code** — удобнее работать там. Просто открой подключение rush01 и выполняй SQL-запросы прямо в редакторе. Там и кириллица отображается нормально, и результаты видны в таблице.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Шаг 1 — Вставляем новые данные
+
+Сначала добавь две строки в currency (это требование задания):
+
+```sql
+INSERT INTO currency VALUES (100, 'EUR', 0.85, '2022-01-01 13:29');
+INSERT INTO currency VALUES (100, 'EUR', 0.79, '2022-01-08 13:29');
+```
+
+Проверь, что теперь 10 строк:
+
+```sql
+SELECT count(*) FROM currency;
+```
+
+## Шаг 2 — Понимание логики
+
+Для каждой строки balance нужно найти ближайший курс валюты:
+
+```
+Balance строка: user_id=1, money=20, currency_id=100, updated=2022-01-01 13:31
+
+Ищем EUR (id=100) курсы в ПРОШЛОМ (updated < 2022-01-01 13:31):
+  → EUR 0.85 at 2022-01-01 13:29  ← ближайший! (разница 2 минуты)
+
+Результат: 20 * 0.85 = 17
+```
+
+```
+Balance строка: user_id=4, money=120, currency_id=200, updated=2022-01-01 01:31
+
+Ищем USD (id=200) курсы в ПРОШЛОМ (updated < 2022-01-01 01:31):
+  → ничего нет!
+
+Ищем USD курсы в БУДУЩЕМ (updated > 2022-01-01 01:31):
+  → USD 1 at 2022-03-02 12:31  ← ближайший!
+
+Результат: 120 * 1 = 120
+```
+
+## Шаг 3 — Решение (отформатированный чеклист)
+
+```sql
+SELECT
+    t1.name,
+    t1.lastname,
+    t1.currency_name,
+    t1.money * t1.rate_to_usd AS currency_in_usd
+FROM (
+    SELECT
+        COALESCE(u.name, 'not defined') AS name,
+        COALESCE(u.lastname, 'not defined') AS lastname,
+        c.name AS currency_name,
+        b.money,
+        COALESCE(
+            -- t1: ищем ближайший курс в ПРОШЛОМ
+            (SELECT rate_to_usd
+             FROM currency c1
+             WHERE b.currency_id = c1.id
+               AND c1.updated < b.updated
+             ORDER BY c1.updated DESC
+             LIMIT 1),
+            -- t2: если в прошлом нет — ищем ближайший в БУДУЩЕМ
+            (SELECT rate_to_usd
+             FROM currency c2
+             WHERE b.currency_id = c2.id
+               AND c2.updated > b.updated
+             ORDER BY c2.updated ASC
+             LIMIT 1)
+        ) AS rate_to_usd
+    FROM balance b
+    -- INNER JOIN: игнорируем валюты, которых нет в currency
+    INNER JOIN (
+        SELECT c.id, c.name
+        FROM currency c
+        GROUP BY c.id, c.name
+    ) AS c ON c.id = b.currency_id
+    -- LEFT JOIN: сохраняем балансы без пользователя (user_id=4)
+    LEFT JOIN "user" u ON u.id = b.user_id
+) AS t1
+ORDER BY 1 DESC, 2, 3;
+```
+
+## Шаг 4 — Проверь результат
+
+Должно быть **8 строк**:
+
+```
+name          | lastname    | currency_name | currency_in_usd
+--------------+-------------+---------------+----------------
+Иван          | Иванов      | EUR           | 150.1
+Иван          | Иванов      | EUR           | 17
+Иван          | Иванов      | EUR           | 158
+not defined   | not defined  | JPY           | 0.948
+not defined   | not defined  | USD           | 120
+not defined   | Сидоров     | EUR           | 39.5
+not defined   | Сидоров     | JPY           | 3.95
+not defined   | Сидоров     | USD           | 500
+```
+
+## Шаг 5 — Пояснения для защиты
+
+**«Почему INNER JOIN с currency, а не LEFT JOIN?»** — задание говорит «игнорируйте валюты, для которых нет ключа в Currency». Поэтому currency_id=210 (у Петра) отбрасывается — его нет в таблице currency.
+
+**«Почему GROUP BY внутри подзапроса currency?»** — в currency одна валюта имеет много строк (разные курсы в разное время). `GROUP BY id, name` даёт **уникальный список валют** для INNER JOIN.
+
+**«Как работает COALESCE с двумя подзапросами?»** — первый подзапрос ищет курс в прошлом (`updated < balance.updated`, отсортирован DESC, LIMIT 1 = ближайший). Если он вернул NULL (ничего в прошлом) — COALESCE берёт второй подзапрос (курс в будущем, отсортирован ASC, LIMIT 1 = ближайший).
+
+**«Почему Петр не в результате?»** — у Петра (id=2) currency_id=210, а такого id в таблице currency нет. INNER JOIN отсеивает эти строки.
