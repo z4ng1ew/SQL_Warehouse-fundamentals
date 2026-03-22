@@ -1,40 +1,18 @@
-INSERT INTO currency VALUES (100, 'EUR', 0.85, '2022-01-01 13:29');
-INSERT INTO currency VALUES (100, 'EUR', 0.79, '2022-01-08 13:29');
-
-CREATE OR REPLACE FUNCTION nearest_rate(p_cur_id bigint, p_date timestamp)
-RETURNS numeric AS $$
-DECLARE
-    res numeric;
-BEGIN
-    SELECT rate_to_usd INTO res FROM (
-        (SELECT rate_to_usd, (updated - p_date) AS time_diff
-        FROM currency
-        WHERE id = p_cur_id AND updated > p_date
-        ORDER BY time_diff ASC LIMIT 1)
-        UNION ALL
-        (SELECT rate_to_usd, (p_date - updated) AS time_diff
-        FROM currency
-        WHERE id = p_cur_id AND updated < p_date
-        ORDER BY time_diff ASC LIMIT 1)
-    ) AS rates
-    ORDER BY time_diff ASC LIMIT 1;
-
-    RETURN res;
-END;
-$$ LANGUAGE plpgsql;
-
-SELECT
-    COALESCE(u.name, 'not defined') AS name,
-    COALESCE(u.lastname, 'not defined') AS lastname,
-    c.name AS currency_name,
-    b.money * nearest_rate(b.currency_id, b.updated) AS currency_in_usd
-FROM
-    balance AS b
-LEFT JOIN
-    "user" AS u ON b.user_id = u.id
-LEFT JOIN
-    (SELECT DISTINCT id, name FROM currency) AS c ON b.currency_id = c.id
-WHERE
-    c.name IS NOT NULL
-ORDER BY
-    name DESC, lastname ASC, currency_name ASC;
+  select t1.name,
+  t1.lastname,
+  currency_name,
+  money * rate_to_usd as currency_in_usd
+  from (
+  select coalesce(u.name,'not defined') as name,
+  coalesce(u.lastname,'not defined') as lastname,
+  c.name as currency_name,
+  money,
+  coalesce((select rate_to_usd
+  from currency c where b.currency_id = c.id and c.updated < b.updated order by c.updated desc limit 1),
+  (select rate_to_usd
+  from currency c where b.currency_id = c.id and c.updated > b.updated order by
+  c.updated asc limit 1)) as rate_to_usd
+  from balance b inner join
+  (select c.id, c.name from currency c group by c.id,c.name) as c on c.id = b.currency_id
+  left join "user" u on u.id = b.user_id) as t1
+  order by 1 desc,2,3;

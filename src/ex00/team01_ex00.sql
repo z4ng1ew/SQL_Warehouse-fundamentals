@@ -1,29 +1,21 @@
-WITH last_rates AS (
-    SELECT id, name, rate_to_usd
-    FROM (
-        SELECT id, name, rate_to_usd,
-            ROW_NUMBER() OVER(PARTITION BY id ORDER BY updated DESC) AS rn
-        FROM currency
-    ) t
-    WHERE rn = 1
-)
-SELECT
-    COALESCE(u.name, 'not defined') AS name,
-    COALESCE(u.lastname, 'not defined') AS lastname,
 
-    b.type,
+  select coalesce(u.name,'not defined') as name,
+  coalesce(u.lastname,'not defined') as lastname,
+  t1.type,
+  t1.volume,
+  coalesce(c.name,'not defined') as currency_name,
+  coalesce((select rate_to_usd from currency c1 where c1.id = c.id and c1.updated = c.l
+  ast_updated),
 
-    SUM(b.money) AS volume,
-    COALESCE(lr.name, 'not defined') AS currency_name,
-    COALESCE(lr.rate_to_usd, 1) AS last_rate_to_usd,
-    SUM(b.money) * COALESCE(lr.rate_to_usd, 1) AS total_volume_in_usd
-FROM balance AS b
-
-FULL JOIN
-    "user" AS u ON b.user_id = u.id
-LEFT JOIN
-    last_rates AS lr ON b.currency_id = lr.id
-GROUP BY
-    u.name, u.lastname, b.type, lr.name, lr.rate_to_usd
-ORDER BY
-    name DESC, lastname ASC, type ASC;
+1) as last_rate_to_usd,
+   t1.volume::numeric * coalesce((select rate_to_usd
+   from currency c1 where c1.id = c.id and c1.updated = c.last_updated),1) as total_volu
+   me_in_usd
+   from (
+   select user_id, type, currency_id, sum(money) as volume
+   from balance b
+   group by user_id,type, currency_id) as t1
+   full join "user" u on u.id = t1.user_id
+   full join (select id,name,max(updated) as last_updated from currency c group by id, na
+   me) as c on c.id = t1.currency_id
+   order by 1 desc,2,3;
