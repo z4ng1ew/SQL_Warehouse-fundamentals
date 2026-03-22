@@ -1,18 +1,34 @@
-  select t1.name,
-  t1.lastname,
-  currency_name,
-  money * rate_to_usd as currency_in_usd
-  from (
-  select coalesce(u.name,'not defined') as name,
-  coalesce(u.lastname,'not defined') as lastname,
-  c.name as currency_name,
-  money,
-  coalesce((select rate_to_usd
-  from currency c where b.currency_id = c.id and c.updated < b.updated order by c.updated desc limit 1),
-  (select rate_to_usd
-  from currency c where b.currency_id = c.id and c.updated > b.updated order by
-  c.updated asc limit 1)) as rate_to_usd
-  from balance b inner join
-  (select c.id, c.name from currency c group by c.id,c.name) as c on c.id = b.currency_id
-  left join "user" u on u.id = b.user_id) as t1
-  order by 1 desc,2,3;
+SELECT
+    t1.name,
+    t1.lastname,
+    t1.currency_name,
+    t1.money * t1.rate_to_usd AS currency_in_usd
+FROM (
+    SELECT
+        COALESCE(u.name, 'not defined') AS name,
+        COALESCE(u.lastname, 'not defined') AS lastname,
+        c.name AS currency_name,
+        b.money,
+        COALESCE(
+            (SELECT rate_to_usd
+             FROM currency c1
+             WHERE b.currency_id = c1.id
+               AND c1.updated < b.updated
+             ORDER BY c1.updated DESC
+             LIMIT 1),
+            (SELECT rate_to_usd
+             FROM currency c2
+             WHERE b.currency_id = c2.id
+               AND c2.updated > b.updated
+             ORDER BY c2.updated ASC
+             LIMIT 1)
+        ) AS rate_to_usd
+    FROM balance b
+    INNER JOIN (
+        SELECT c.id, c.name
+        FROM currency c
+        GROUP BY c.id, c.name
+    ) AS c ON c.id = b.currency_id
+    LEFT JOIN "user" u ON u.id = b.user_id
+) AS t1
+ORDER BY 1 DESC, 2, 3;
