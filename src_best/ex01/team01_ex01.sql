@@ -1,18 +1,24 @@
-  select t1.name,
-  t1.lastname,
-  currency_name,
-  money * rate_to_usd as currency_in_usd
-  from (
-  select coalesce(u.name,'not defined') as name,
-  coalesce(u.lastname,'not defined') as lastname,
-  c.name as currency_name,
-  money,
-  coalesce((select rate_to_usd
-  from currency c where b.currency_id = c.id and c.updated < b.updated order by c.updated desc limit 1),
-  (select rate_to_usd
-  from currency c where b.currency_id = c.id and c.updated > b.updated order by
-  c.updated asc limit 1)) as rate_to_usd
-  from balance b inner join
-  (select c.id, c.name from currency c group by c.id,c.name) as c on c.id = b.currency_id
-  left join "user" u on u.id = b.user_id) as t1
-  order by 1 desc,2,3;
+WITH rated_balance AS (
+    SELECT
+        b.user_id,
+        b.money,
+        c.name AS currency_name,
+        COALESCE(
+            (SELECT rate_to_usd FROM currency
+             WHERE id = b.currency_id AND updated < b.updated
+             ORDER BY updated DESC LIMIT 1),
+            (SELECT rate_to_usd FROM currency
+             WHERE id = b.currency_id AND updated > b.updated
+             ORDER BY updated ASC LIMIT 1)
+        ) AS rate
+    FROM balance b
+    INNER JOIN (SELECT DISTINCT id, name FROM currency) c ON c.id = b.currency_id
+)
+SELECT
+    COALESCE(u.name, 'not defined')     AS name,
+    COALESCE(u.lastname, 'not defined') AS lastname,
+    rb.currency_name,
+    trim_scale(rb.money * rb.rate)      AS currency_in_usd
+FROM rated_balance rb
+LEFT JOIN "user" u ON u.id = rb.user_id
+ORDER BY 1 DESC, 2, 3;
