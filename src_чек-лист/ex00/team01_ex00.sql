@@ -11,13 +11,13 @@ SELECT
            AND c1.updated = c.last_updated),
         1
     ) AS last_rate_to_usd,
-    t1.volume::numeric * COALESCE(
+    trim_scale(t1.volume::numeric * COALESCE(
         (SELECT rate_to_usd
          FROM currency c1
          WHERE c1.id = c.id
            AND c1.updated = c.last_updated),
         1
-    ) AS total_volume_in_usd
+    )) AS total_volume_in_usd
 FROM (
     SELECT user_id, type, currency_id, SUM(money) AS volume
     FROM balance b
