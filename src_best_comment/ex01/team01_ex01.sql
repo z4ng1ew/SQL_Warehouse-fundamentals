@@ -27,6 +27,18 @@ ORDER BY 1 DESC, 2, 3;
 
 
 
+
+
+
+
+
+
+-- В задании 00 мы брали последний курс валюты для всех транзакций. Тут сложнее — нужно для каждой транзакции найти свой курс, ближайший по времени.
+
+
+
+
+
 -- CTE rated_balance: подготавливаем данные — для каждой транзакции
 -- из balance находим ближайший курс валюты
 WITH rated_balance AS (
@@ -123,3 +135,148 @@ ORDER BY 1 DESC, 2, 3;
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Порядок выполнения запроса
+
+### Шаг 1 — CTE `rated_balance`
+
+PostgreSQL первым делом выполняет WITH-блок.
+
+#### Шаг 1.1 — Подзапрос для INNER JOIN
+
+```sql
+SELECT DISTINCT id, name FROM currency
+```
+
+Берёт таблицу currency (10 строк) и оставляет уникальные пары (id, name):
+
+```
+id=100, EUR
+id=200, USD
+id=300, JPY
+```
+
+#### Шаг 1.2 — INNER JOIN с balance
+
+```sql
+FROM balance b
+INNER JOIN (...) c ON c.id = b.currency_id
+```
+
+Соединяет balance (10 строк) с уникальными валютами. Строки с currency_id=210 (Петр) **отбрасываются**, потому что такого id нет в currency. Остаётся **8 строк**.
+
+#### Шаг 1.3 — Для каждой из 8 строк ищется курс
+
+```sql
+COALESCE(
+    (SELECT ... WHERE updated < b.updated ORDER BY updated DESC LIMIT 1),
+    (SELECT ... WHERE updated > b.updated ORDER BY updated ASC LIMIT 1)
+)
+```
+
+Для **каждой строки** выполняются два коррелированных подзапроса.
+
+Пример для Ивана (money=200, currency_id=100, updated=2022-01-09 13:31):
+
+**Первый подзапрос** — курсы EUR **в прошлом** (updated < 2022-01-09 13:31):
+
+```
+EUR 0.85 — 2022-01-01 13:29
+EUR 0.79 — 2022-01-08 13:29  ← DESC, LIMIT 1 = ближайший
+```
+
+Нашёл 0.79. COALESCE получил не-NULL → **второй подзапрос не нужен**.
+
+Пример для user_id=4 (money=120, currency_id=200, updated=2022-01-01 01:31):
+
+**Первый подзапрос** — курсы USD **в прошлом** (updated < 2022-01-01 01:31):
+
+```
+ничего нет → NULL
+```
+
+**Второй подзапрос** — курсы USD **в будущем** (updated > 2022-01-01 01:31):
+
+```
+USD 1 — 2022-03-02 12:31  ← ASC, LIMIT 1 = ближайший
+USD 1 — 2022-03-03 13:31
+```
+
+Нашёл 1.
+
+#### Результат CTE rated_balance — 8 строк:
+
+```
+user_id=1, money=20,  currency_name=EUR, rate=0.85
+user_id=1, money=200, currency_name=EUR, rate=0.79
+user_id=1, money=190, currency_name=EUR, rate=0.79
+user_id=4, money=120, currency_name=JPY, rate=0.0079
+user_id=4, money=120, currency_name=USD, rate=1
+user_id=3, money=50,  currency_name=EUR, rate=0.79
+user_id=3, money=500, currency_name=USD, rate=1
+user_id=3, money=500, currency_name=JPY, rate=0.0079
+```
+
+### Шаг 2 — LEFT JOIN с user
+
+```sql
+FROM rated_balance rb
+LEFT JOIN "user" u ON u.id = rb.user_id
+```
+
+К каждой из 8 строк подтягиваются имя и фамилия пользователя. user_id=4 не найден в user → `u.name` и `u.lastname` будут NULL.
+
+### Шаг 3 — SELECT (вычисление столбцов)
+
+```sql
+COALESCE(u.name, 'not defined')     → подстановка имён
+COALESCE(u.lastname, 'not defined') → подстановка фамилий
+rb.currency_name                    → название валюты
+trim_scale(rb.money * rb.rate)      → конвертация в USD + убрать нули
+```
+
+Пример вычислений:
+
+```
+Иван:  200 * 0.79 = 158    → trim_scale → 158
+Иван:  20  * 0.85 = 17     → trim_scale → 17
+Иван:  190 * 0.79 = 150.1  → trim_scale → 150.1
+```
+
+### Шаг 4 — ORDER BY (сортировка)
+
+```sql
+ORDER BY 1 DESC, 2, 3
+```
+
+Сортирует готовые 8 строк: name по убыванию, lastname по возрастанию, currency_name по возрастанию.
+
+### Итоговый результат
+
+```
+Иван,        Иванов,      EUR, 150.1
+Иван,        Иванов,      EUR, 17
+Иван,        Иванов,      EUR, 158
+not defined, not defined,  JPY, 0.948
+not defined, not defined,  USD, 120
+not defined, Сидоров,      EUR, 39.5
+not defined, Сидоров,      JPY, 3.95
+not defined, Сидоров,      USD, 500
+```
+
+8 строк, полностью совпадает с чеклистом.
