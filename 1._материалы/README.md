@@ -4,20 +4,6 @@
 
 Resume: Today you will know what DWH is and how to create a first ETL process.
 
-💡 [Tap here](https://new.oprosso.net/p/4cb31ec3f47a4596bc758ea1861fb624) **to leave your feedback on the project**. It's anonymous and will help our team make your educational experience better. We recommend completing the survey immediately after the project.
-
-## Contents
-
-1. [Chapter I](#chapter-i) \
-    1.1. [Preamble](#preamble)
-2. [Chapter II](#chapter-ii) \
-    2.1. [General Rules](#general-rules)
-3. [Chapter III](#chapter-iii) \
-    3.1. [Rules of the day](#rules-of-the-day)  
-4. [Chapter IV](#chapter-iv) \
-    4.1. [Exercise 00 — Classical DWH](#exercise-00-classical-dwh)  
-5. [Chapter V](#chapter-v) \
-    5.1. [Exercise 01 — Detailed Query](#exercise-01-detailed-query)  
 
 ## Chapter I
 ## Preamble
